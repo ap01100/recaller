@@ -1,0 +1,7 @@
+{
+  "name": "Recaller",
+  "description": "Легковесное веб-приложение для самопроверки и активного воспроизведения знаний с поддержкой таймеров, анализа ошибок и JSON/Base64 тестов.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

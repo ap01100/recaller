@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="ru" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Recaller — Самопроверка и активное воспроизведение знаний</title>
+    <meta name="description" content="Легковесное веб-приложение для самопроверки и активного воспроизведения знаний с поддержкой таймеров, анализа ошибок и JSON/Base64 тестов." />
+    <meta property="og:title" content="Recaller — Самопроверка и активное воспроизведение знаний" />
+    <meta property="og:description" content="Легковесное веб-приложение для самопроверки и активного воспроизведения знаний с поддержкой таймеров, анализа ошибок и JSON/Base64 тестов." />
+    <meta property="og:type" content="website" />
+    
+    <!-- Tailwind CSS (CDN for zero-build portability on Linux/Windows) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="./static/style.css" />
+  </head>
+  <body class="min-h-full flex flex-col bg-[#FAFAFA] text-[#171717] dark:bg-[#0A0A0A] dark:text-[#EDEDED] antialiased selection:bg-[#171717] selection:text-white dark:selection:bg-[#EDEDED] dark:selection:text-[#171717] font-sans">
+
+    <!-- Top Navigation Header -->
+    <header id="app-header" class="sticky top-0 z-30 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur border-b border-[#E5E5E5] dark:border-[#262626] transition-colors">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+        <!-- Logo -->
+        <div class="flex items-center gap-2.5 cursor-pointer select-none" onclick="Router.navigate('dashboard')">
+          <div class="w-7 h-7 rounded-md bg-[#171717] dark:bg-[#EDEDED] text-[#FAFAFA] dark:text-[#171717] flex items-center justify-center font-bold text-xs tracking-tight">
+            R
+          </div>
+          <div>
+            <div class="font-medium text-sm tracking-tight leading-none text-[#171717] dark:text-[#EDEDED] flex items-center gap-2">
+              Recaller
+              <span class="hidden sm:inline-block text-[10px] font-mono uppercase tracking-wider text-[#737373] dark:text-[#A3A3A3] bg-[#F5F5F5] dark:bg-[#1F1F1F] px-1.5 py-0.5 rounded border border-[#E5E5E5] dark:border-[#262626]">Active Recall</span>
+            </div>
+            <div class="text-[11px] text-[#737373] dark:text-[#A3A3A3] leading-tight mt-0.5">Самопроверка знаний</div>
+          </div>
+        </div>
+
+        <!-- Center Storage Badge -->
+        <div id="storage-mode-indicator" class="hidden md:block"></div>
+
+        <!-- Right Header Actions -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <button 
+            id="header-import-btn"
+            onclick="Router.openModal('import_spec')" 
+            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+            title="Импорт теста через Base64 и спецификация схемы"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            <span>Импорт Base64</span>
+          </button>
+
+          <button 
+            id="header-new-test-btn"
+            onclick="BuilderView.startNew()" 
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] transition-colors"
+            title="Создать новый тест вручную"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            <span class="hidden xs:inline">Создать тест</span>
+            <span class="xs:hidden">Создать</span>
+          </button>
+
+          <button 
+            id="header-history-btn"
+            onclick="Router.openModal('history')" 
+            class="p-1.5 rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+            title="История попыток"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          </button>
+
+          <!-- Theme Toggle -->
+          <button 
+            id="theme-toggle-btn" 
+            onclick="DataStore.toggleTheme()" 
+            class="p-1.5 rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+            title="Сменить тему (светлая/темная)"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 flex flex-col">
+
+      <!-- ====================================================================
+           SCREEN 1: DASHBOARD
+           ==================================================================== -->
+      <section id="screen-dashboard" class="screen-view flex-1 flex flex-col">
+        
+        <!-- Controls Bar (Search + Tag Filter + Actions) -->
+        <div class="mb-5 space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <!-- Search Input -->
+            <div class="relative flex-1">
+              <svg class="w-4 h-4 text-[#A3A3A3] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <input 
+                type="text" 
+                id="search-input" 
+                placeholder="Поиск по названию или тегам (например: linux, web)..." 
+                oninput="DashboardView.handleSearch(this.value)" 
+                class="w-full pl-9 pr-4 py-2 text-xs sm:text-sm rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED] placeholder-[#A3A3A3] focus:outline-none focus:border-[#171717] dark:focus:border-[#EDEDED] focus:ring-1 focus:ring-[#171717] dark:focus:ring-[#EDEDED] transition-colors"
+              />
+            </div>
+
+            <!-- Mobile Import button visible on small screens -->
+            <button 
+              onclick="Router.openModal('import_spec')" 
+              class="sm:hidden flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED]"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+              Импорт Base64
+            </button>
+
+            <!-- Counter -->
+            <div class="hidden sm:flex items-center text-xs font-mono text-[#737373] dark:text-[#A3A3A3] shrink-0">
+              <span id="tests-total-count">0 тестов</span>
+            </div>
+          </div>
+
+          <!-- Tags List -->
+          <div class="flex items-center gap-1.5 overflow-x-auto py-1 no-scrollbar text-xs" id="tag-filters-container">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Tests Grid -->
+        <div id="tests-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          <!-- Rendered by JS -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="tests-empty-state" class="hidden flex-1 flex flex-col items-center justify-center p-10 text-center rounded-xl border border-dashed border-[#E5E5E5] dark:border-[#262626] bg-white/50 dark:bg-[#141414]/50 my-auto">
+          <div class="w-10 h-10 rounded-lg bg-[#F5F5F5] dark:bg-[#262626] text-[#737373] dark:text-[#A3A3A3] flex items-center justify-center mb-3">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          </div>
+          <h3 class="text-sm font-semibold text-[#171717] dark:text-[#EDEDED] mb-1">Тесты не найдены</h3>
+          <p class="text-xs text-[#737373] dark:text-[#A3A3A3] max-w-sm mb-4">
+            По данному запросу ничего не нашлось. Вы можете создать собственный тест или загрузить демо-материалы.
+          </p>
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            <button 
+              onclick="BuilderView.startNew()" 
+              class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] transition-colors"
+            >
+              + Создать тест
+            </button>
+            <button 
+              onclick="DashboardView.restoreDemoTests()" 
+              class="px-3.5 py-1.5 text-xs font-medium rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+            >
+              Восстановить демо-тесты
+            </button>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           SCREEN 2: MANUAL TEST BUILDER
+           ==================================================================== -->
+      <section id="screen-builder" class="screen-view hidden max-w-3xl mx-auto w-full flex-1 flex flex-col">
+        <div class="bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl p-5 sm:p-7 shadow-sm">
+          
+          <!-- Builder Header -->
+          <div class="flex items-center justify-between border-b border-[#E5E5E5] dark:border-[#262626] pb-4 mb-5">
+            <div>
+              <h2 id="builder-header-title" class="text-base sm:text-lg font-semibold text-[#171717] dark:text-[#EDEDED]">
+                Конструктор теста
+              </h2>
+              <p class="text-xs text-[#737373] dark:text-[#A3A3A3] mt-0.5">
+                Задайте параметры темы, таймер и вопросы с ответами и пояснениями.
+              </p>
+            </div>
+            <button 
+              type="button" 
+              onclick="Router.navigate('dashboard')" 
+              class="text-xs text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] font-medium"
+            >
+              ✕ Отмена
+            </button>
+          </div>
+
+          <!-- Basic Settings Form -->
+          <div class="space-y-4 mb-6">
+            <div>
+              <label class="block text-xs font-medium text-[#525252] dark:text-[#A3A3A3] mb-1.5">
+                Название темы или теста *
+              </label>
+              <input 
+                type="text" 
+                id="builder-title" 
+                placeholder="Например: Основы Docker и Контейнеризации" 
+                class="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED] placeholder-[#A3A3A3] focus:outline-none focus:border-[#171717] dark:focus:border-[#EDEDED] focus:ring-1 focus:ring-[#171717] dark:focus:ring-[#EDEDED]"
+              />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-[#525252] dark:text-[#A3A3A3] mb-1.5">
+                  Теги (через запятую)
+                </label>
+                <input 
+                  type="text" 
+                  id="builder-tags" 
+                  placeholder="docker, devops, linux" 
+                  class="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED] placeholder-[#A3A3A3] focus:outline-none focus:border-[#171717] dark:focus:border-[#EDEDED] focus:ring-1 focus:ring-[#171717] dark:focus:ring-[#EDEDED]"
+                />
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-[#525252] dark:text-[#A3A3A3] mb-1.5">
+                  Таймер по умолчанию (минут)
+                </label>
+                <input 
+                  type="number" 
+                  id="builder-timer" 
+                  min="0" 
+                  max="180" 
+                  value="5" 
+                  class="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED] placeholder-[#A3A3A3] focus:outline-none focus:border-[#171717] dark:focus:border-[#EDEDED] focus:ring-1 focus:ring-[#171717] dark:focus:ring-[#EDEDED]"
+                />
+                <span class="text-[11px] text-[#737373] dark:text-[#A3A3A3] mt-1 block">Укажите 0, чтобы по умолчанию отключить ограничение времени</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Question List Header -->
+          <div class="flex items-center justify-between border-t border-[#E5E5E5] dark:border-[#262626] pt-5 mb-4">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-[#525252] dark:text-[#A3A3A3]">
+              Вопросы теста
+            </h3>
+            <div class="flex items-center gap-2">
+              <button 
+                type="button" 
+                onclick="BuilderView.addQuestion('choice')" 
+                class="px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#262626] transition-colors"
+              >
+                + Выбор (choice)
+              </button>
+              <button 
+                type="button" 
+                onclick="BuilderView.addQuestion('input')" 
+                class="px-2.5 py-1 text-xs font-medium rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#262626] transition-colors"
+              >
+                + Ввод (input)
+              </button>
+            </div>
+          </div>
+
+          <!-- Questions Dynamic List -->
+          <div id="builder-questions-list">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="flex items-center justify-end gap-2.5 pt-5 border-t border-[#E5E5E5] dark:border-[#262626] mt-6">
+            <button 
+              type="button" 
+              onclick="Router.navigate('dashboard')" 
+              class="px-4 py-2 rounded-lg border border-[#E5E5E5] dark:border-[#262626] text-[#171717] dark:text-[#EDEDED] font-medium text-xs sm:text-sm hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+            >
+              Отмена
+            </button>
+            <button 
+              type="button" 
+              onclick="BuilderView.save()" 
+              class="px-5 py-2 rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium text-xs sm:text-sm shadow-sm transition-colors"
+            >
+              Сохранить тест
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+
+      <!-- ====================================================================
+           SCREEN 3: ACTIVE TEST RUN (Focus Mode)
+           ==================================================================== -->
+      <section id="screen-test" class="screen-view hidden max-w-2xl mx-auto w-full flex-1 flex flex-col justify-between py-2 sm:py-6">
+        
+        <!-- Top Bar: Title, Counter, Timer, Abort -->
+        <div class="mb-5">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="flex-1 min-w-0">
+              <h2 id="test-running-title" class="text-xs sm:text-sm font-semibold text-[#171717] dark:text-[#EDEDED] truncate">
+                Тест
+              </h2>
+              <div id="test-question-counter" class="text-xs font-mono text-[#737373] dark:text-[#A3A3A3] mt-0.5">
+                Вопрос 1 из 1
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 shrink-0">
+              <div id="test-timer-badge"></div>
+              <button 
+                type="button" 
+                onclick="TestRunView.confirmExit()" 
+                class="text-xs text-[#DC2626] hover:underline font-medium px-2 py-1"
+                title="Прервать тестирование"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="w-full h-1 bg-[#E5E5E5] dark:bg-[#262626] rounded-full overflow-hidden">
+            <div id="test-progress-bar-fill" class="h-full bg-[#171717] dark:bg-[#EDEDED] transition-all duration-300 ease-out" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Question Card -->
+        <div class="bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl p-5 sm:p-7 shadow-sm flex-1 flex flex-col justify-between mb-4">
+          
+          <!-- Question Body -->
+          <div>
+            <div class="text-base sm:text-lg font-semibold text-[#171717] dark:text-[#EDEDED] question-content leading-relaxed mb-6" id="test-question-text">
+              <!-- Question text rendered by JS -->
+            </div>
+
+            <!-- Answers choices or input -->
+            <div id="test-answers-container" class="space-y-3">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Bottom Shortcut Tip (visible on non-touch devices) -->
+          <div class="mt-8 pt-4 border-t border-[#E5E5E5] dark:border-[#262626] flex items-center justify-between text-xs text-[#737373] dark:text-[#A3A3A3]">
+            <div class="hidden sm:flex items-center gap-2 font-mono text-[11px]">
+              <span>Клавиши:</span>
+              <kbd class="px-1.5 py-0.5 rounded border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A]">1-9</kbd> выбор
+              <span>•</span>
+              <kbd class="px-1.5 py-0.5 rounded border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A]">Enter</kbd> далее
+            </div>
+            <div class="text-[11px]">
+              Не забывайте проверять орфографию для ввода
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bottom Navigation Controls -->
+        <div class="flex items-center justify-end gap-3">
+          <button 
+            type="button" 
+            id="test-next-btn" 
+            onclick="TestRunView.submitOrNext()" 
+            class="w-full sm:w-auto min-w-[140px] flex items-center justify-center gap-2 bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium py-2.5 px-5 rounded-lg shadow-sm text-xs sm:text-sm transition-colors"
+          >
+            Далее <kbd class="ml-2 hidden sm:inline-flex">Enter</kbd>
+          </button>
+        </div>
+
+      </section>
+
+
+      <!-- ====================================================================
+           SCREEN 4: RESULTS SCREEN
+           ==================================================================== -->
+      <section id="screen-results" class="screen-view hidden max-w-3xl mx-auto w-full flex-1 flex flex-col">
+        
+        <!-- Result Hero Card -->
+        <div class="bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl p-6 sm:p-8 shadow-sm mb-5 text-center">
+          
+          <div id="results-status-badge" class="mb-3"></div>
+
+          <div id="results-score-percent" class="text-5xl sm:text-6xl font-bold mb-2 tracking-tight text-[#171717] dark:text-[#EDEDED]">
+            0%
+          </div>
+
+          <div id="results-correct-stats" class="text-xs sm:text-sm font-medium text-[#525252] dark:text-[#A3A3A3] mb-1">
+            0 из 0 верно
+          </div>
+
+          <div class="text-xs text-[#737373] dark:text-[#A3A3A3] font-mono mb-5">
+            Затраченное время: <span id="results-duration-stats">00:00</span>
+          </div>
+
+          <!-- Actions Row -->
+          <div class="flex flex-wrap items-center justify-center gap-2.5">
+            <button 
+              id="results-retry-failed-btn" 
+              onclick="ResultsView.retryFailedOnly()" 
+              class="hidden inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium text-xs sm:text-sm shadow-sm transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Работа над ошибками
+            </button>
+
+            <button 
+              onclick="ResultsView.restartAll()" 
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] font-medium text-xs sm:text-sm transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Пройти заново
+            </button>
+
+            <button 
+              onclick="Router.navigate('dashboard')" 
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium text-xs sm:text-sm shadow-sm transition-colors"
+            >
+              На главную
+            </button>
+          </div>
+        </div>
+
+        <!-- Breakdown Section -->
+        <div class="bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl p-5 sm:p-7 shadow-sm flex-1 flex flex-col">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-[#E5E5E5] dark:border-[#262626]">
+            <div>
+              <h3 class="text-sm sm:text-base font-semibold text-[#171717] dark:text-[#EDEDED]">
+                Детальный разбор вопросов
+              </h3>
+              <p class="text-xs text-[#737373] dark:text-[#A3A3A3]">
+                Сравнение ваших ответов с правильными и подробные пояснения.
+              </p>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="flex items-center gap-1 bg-[#F5F5F5] dark:bg-[#1C1C1C] p-0.5 rounded-lg border border-[#E5E5E5] dark:border-[#262626] text-xs font-medium">
+              <button 
+                onclick="ResultsView.setFilter('all')" 
+                class="px-2.5 py-1 rounded-md transition-all hover:bg-white dark:hover:bg-[#141414]"
+              >Все</button>
+              <button 
+                onclick="ResultsView.setFilter('wrong')" 
+                class="px-2.5 py-1 rounded-md transition-all hover:bg-white dark:hover:bg-[#141414] text-[#DC2626] dark:text-[#F87171]"
+              >Только ошибки</button>
+              <button 
+                onclick="ResultsView.setFilter('correct')" 
+                class="px-2.5 py-1 rounded-md transition-all hover:bg-white dark:hover:bg-[#141414] text-[#15803D] dark:text-[#4ADE80]"
+              >Только верные</button>
+            </div>
+          </div>
+
+          <!-- Questions Review List -->
+          <div id="results-breakdown-list">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+
+    <!-- ====================================================================
+         MODALS & DIALOGS
+         ==================================================================== -->
+
+    <!-- Backdrop -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 hidden transition-opacity" onclick="Router.closeModal()"></div>
+
+    <!-- Modal 1: Import Base64 & Format Specification -->
+    <div id="modal-import_spec" class="app-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-xl max-h-[90vh] flex flex-col bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl shadow-xl p-5 sm:p-6 hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-[#E5E5E5] dark:border-[#262626] mb-4">
+        <h3 class="text-sm sm:text-base font-semibold text-[#171717] dark:text-[#EDEDED]">Импорт и Спецификация ключа</h3>
+        <button onclick="Router.closeModal()" class="text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] text-base">✕</button>
+      </div>
+
+      <!-- Tabs Navigation -->
+      <div class="flex border-b border-[#E5E5E5] dark:border-[#262626] mb-4">
+        <button id="tab-btn-import" onclick="ImportSpecModal.switchTab('import')">Импорт ключа</button>
+        <button id="tab-btn-spec" onclick="ImportSpecModal.switchTab('spec')">Спецификация схемы</button>
+      </div>
+
+      <!-- Tab 1: Import -->
+      <div id="tab-panel-import" class="space-y-3 flex-1 overflow-y-auto">
+        <p class="text-xs text-[#737373] dark:text-[#A3A3A3]">
+          Вставьте закодированную строку Base64 (UTF-8). Приложение проверит схему JSON и добавит тест в коллекцию.
+        </p>
+        
+        <textarea 
+          id="base64-import-input" 
+          rows="5" 
+          placeholder="eyAgImlkIjogImxpbnV4IiwgInRpdGxlIjogItCe0YHQvdC+0LLRiyBMaW51eCIs..." 
+          class="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED] placeholder-[#A3A3A3] focus:outline-none focus:border-[#171717] dark:focus:border-[#EDEDED] focus:ring-1 focus:ring-[#171717] dark:focus:ring-[#EDEDED]"
+        ></textarea>
+
+        <div id="import-error-box" class="hidden p-3 rounded-lg bg-[#FEF2F2] dark:bg-[#450A0A]/60 border border-[#FECACA] dark:border-[#7F1D1D] text-[#B91C1C] dark:text-[#F87171] text-xs font-medium"></div>
+        <div id="import-preview-box" class="hidden p-3 rounded-lg bg-[#F0FDF4] dark:bg-[#052E16]/60 border border-[#BBF7D0] dark:border-[#166534] text-xs"></div>
+
+        <div class="flex items-center justify-between pt-2">
+          <button 
+            type="button" 
+            onclick="ImportSpecModal.copyDemoBase64Key()" 
+            class="text-xs text-[#171717] dark:text-[#EDEDED] hover:underline font-medium"
+          >
+            Вставить пример демо-ключа
+          </button>
+          <button 
+            type="button" 
+            onclick="ImportSpecModal.processInput()" 
+            class="px-4 py-2 rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium text-xs transition-colors shadow-sm"
+          >
+            Импортировать
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Specification -->
+      <div id="tab-panel-spec" class="hidden space-y-3 flex-1 overflow-y-auto text-xs">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-[#171717] dark:text-[#EDEDED]">Требования к формату JSON:</span>
+          <button 
+            type="button" 
+            onclick="ImportSpecModal.copySpecification()" 
+            class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#1A1A1A] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#262626]"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            Скопировать спецификацию
+          </button>
+        </div>
+
+        <ul class="list-disc pl-4 space-y-1 text-[#525252] dark:text-[#A3A3A3]">
+          <li><strong>Кодирование:</strong> Base64 от строки JSON в кодировке UTF-8.</li>
+          <li><strong>Поля верхнего уровня:</strong> <code class="text-xs">id</code> (slug), <code class="text-xs">title</code> (строка), <code class="text-xs">tags</code> (массив), <code class="text-xs">default_timer_minutes</code> (число), <code class="text-xs">questions</code> (массив).</li>
+          <li><strong>Тип <code class="text-xs">choice</code>:</strong> содержит <code class="text-xs">options</code> (массив строк) и <code class="text-xs">correct</code> (массив индексов ответа, 0-based).</li>
+          <li><strong>Тип <code class="text-xs">input</code>:</strong> содержит <code class="text-xs">correct</code> (массив допустимых строковых ответов). Регистр не имеет значения.</li>
+          <li><strong>Пояснение:</strong> поле <code class="text-xs">explanation</code> поддерживает <code class="text-xs">`inline code`</code>.</li>
+        </ul>
+
+        <div class="mt-3">
+          <pre class="p-3 rounded-lg bg-[#141414] dark:bg-[#0A0A0A] text-[#EDEDED] text-[11px] font-mono overflow-x-auto border border-[#262626]">{
+  "id": "linux-test",
+  "title": "Основы Linux",
+  "tags": ["linux", "networking"],
+  "default_timer_minutes": 10,
+  "questions": [
+    {
+      "id": 1,
+      "type": "choice",
+      "text": "Сигнал для \`kill -9\`:",
+      "options": ["SIGTERM", "SIGKILL", "SIGINT"],
+      "correct": [1],
+      "explanation": "Сигнал 9 — это SIGKILL."
+    },
+    {
+      "id": 2,
+      "type": "input",
+      "text": "Команда просмотра сокетов:",
+      "correct": ["ss", "netstat"],
+      "explanation": "ss и netstat используются для вывода сокетов."
+    }
+  ]
+}</pre>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Modal 2: Prestart Setup -->
+    <div id="modal-prestart" class="app-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl shadow-xl p-5 sm:p-6 hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-[#E5E5E5] dark:border-[#262626] mb-4">
+        <h3 class="text-sm sm:text-base font-semibold text-[#171717] dark:text-[#EDEDED]">Настройка перед стартом</h3>
+        <button onclick="Router.closeModal()" class="text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] text-base">✕</button>
+      </div>
+
+      <div class="mb-4">
+        <div id="prestart-test-title" class="font-medium text-sm sm:text-base text-[#171717] dark:text-[#EDEDED] mb-0.5"></div>
+        <div id="prestart-question-count" class="text-xs text-[#737373] dark:text-[#A3A3A3]"></div>
+      </div>
+
+      <!-- Timer Mode Selector -->
+      <div class="space-y-2.5 mb-5">
+        <label class="block text-xs font-medium text-[#525252] dark:text-[#A3A3A3]">
+          Режим таймера:
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-lg border border-[#E5E5E5] dark:border-[#262626] hover:bg-[#FAFAFA] dark:hover:bg-[#1F1F1F] cursor-pointer transition-colors">
+          <input type="radio" name="timer_mode" value="none" class="mt-1 accent-[#171717] dark:accent-[#EDEDED]" />
+          <div class="text-xs">
+            <span class="font-medium text-[#171717] dark:text-[#EDEDED] block">Без ограничения времени</span>
+            <span class="text-[#737373] dark:text-[#A3A3A3]">Спокойный темп, идеально для первого знакомства с темой</span>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-lg border border-[#E5E5E5] dark:border-[#262626] hover:bg-[#FAFAFA] dark:hover:bg-[#1F1F1F] cursor-pointer transition-colors">
+          <input type="radio" name="timer_mode" value="test" class="mt-1 accent-[#171717] dark:accent-[#EDEDED]" />
+          <div class="text-xs flex-1">
+            <span class="font-medium text-[#171717] dark:text-[#EDEDED] block">Общий таймер на весь тест</span>
+            <div class="flex items-center gap-2 mt-1.5">
+              <input 
+                type="number" 
+                id="prestart-timer-minutes" 
+                min="1" 
+                max="180" 
+                value="5" 
+                class="w-16 px-2 py-1 text-xs rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED]"
+              />
+              <span class="text-[#737373] dark:text-[#A3A3A3]">минут</span>
+            </div>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-lg border border-[#E5E5E5] dark:border-[#262626] hover:bg-[#FAFAFA] dark:hover:bg-[#1F1F1F] cursor-pointer transition-colors">
+          <input type="radio" name="timer_mode" value="question" class="mt-1 accent-[#171717] dark:accent-[#EDEDED]" />
+          <div class="text-xs flex-1">
+            <span class="font-medium text-[#171717] dark:text-[#EDEDED] block">Таймер на каждый вопрос</span>
+            <div class="flex items-center gap-2 mt-1.5">
+              <input 
+                type="number" 
+                id="prestart-timer-per-q" 
+                min="5" 
+                max="300" 
+                value="30" 
+                class="w-16 px-2 py-1 text-xs rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#0A0A0A] text-[#171717] dark:text-[#EDEDED]"
+              />
+              <span class="text-[#737373] dark:text-[#A3A3A3]">секунд на вопрос</span>
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Shuffle Option -->
+      <div class="mb-5">
+        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-[#171717] dark:text-[#EDEDED]">
+          <input type="checkbox" id="prestart-shuffle-checkbox" class="w-4 h-4 rounded accent-[#171717] dark:accent-[#EDEDED] cursor-pointer" />
+          <span>Перемешать вопросы и варианты ответов</span>
+        </label>
+      </div>
+
+      <!-- Start Button -->
+      <button 
+        type="button" 
+        onclick="PrestartModal.start()" 
+        class="w-full py-2.5 rounded-lg bg-[#171717] hover:bg-[#262626] dark:bg-[#EDEDED] dark:hover:bg-white text-[#FAFAFA] dark:text-[#171717] font-medium text-xs sm:text-sm shadow-sm transition-colors"
+      >
+        Начать тестирование
+      </button>
+    </div>
+
+
+    <!-- Modal 3: History Logs -->
+    <div id="modal-history" class="app-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-xl max-h-[85vh] flex flex-col bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl shadow-xl p-5 sm:p-6 hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-[#E5E5E5] dark:border-[#262626] mb-4">
+        <h3 class="text-sm sm:text-base font-semibold text-[#171717] dark:text-[#EDEDED]">История прохождений</h3>
+        <button onclick="Router.closeModal()" class="text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] text-base">✕</button>
+      </div>
+
+      <div id="history-logs-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="flex items-center justify-between pt-4 border-t border-[#E5E5E5] dark:border-[#262626] mt-4">
+        <button 
+          type="button" 
+          onclick="HistoryModal.clearHistory()" 
+          class="text-xs text-[#DC2626] hover:underline font-medium"
+        >
+          Очистить журнал
+        </button>
+        <button 
+          type="button" 
+          onclick="Router.closeModal()" 
+          class="px-4 py-2 rounded-lg border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#141414] text-[#171717] dark:text-[#EDEDED] hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] font-medium text-xs transition-colors"
+        >
+          Закрыть
+        </button>
+      </div>
+    </div>
+
+
+    <!-- Modal 4: Delete Confirmation -->
+    <div id="modal-delete_confirm" class="app-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-white dark:bg-[#141414] border border-[#E5E5E5] dark:border-[#262626] rounded-xl shadow-xl p-6 text-center hidden">
+      <div class="w-10 h-10 rounded-full bg-[#FEF2F2] dark:bg-[#450A0A]/70 text-[#DC2626] dark:text-[#F87171] flex items-center justify-center mx-auto mb-3">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      </div>
+      <h3 class="text-sm sm:text-base font-semibold text-[#171717] dark:text-[#EDEDED] mb-1">Удалить тест?</h3>
+      <p class="text-xs text-[#737373] dark:text-[#A3A3A3] mb-5">
+        Файл теста будет удален из директории приложения. Это действие необратимо.
+      </p>
+      <div class="flex items-center justify-center gap-2">
+        <button 
+          type="button" 
+          onclick="Router.closeModal()" 
+          class="px-4 py-2 rounded-lg border border-[#E5E5E5] dark:border-[#262626] text-[#171717] dark:text-[#EDEDED] font-medium text-xs hover:bg-[#F5F5F5] dark:hover:bg-[#1F1F1F] transition-colors"
+        >
+          Отмена
+        </button>
+        <button 
+          type="button" 
+          onclick="DashboardView.confirmDelete()" 
+          class="px-4 py-2 rounded-lg bg-[#DC2626] hover:bg-red-700 text-white font-medium text-xs shadow-sm transition-colors"
+        >
+          Да, удалить
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast Notifications Floating Container -->
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+    <!-- Application Script -->
+    <script src="./static/app.js"></script>
+  </body>
+</html>

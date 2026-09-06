@@ -1,0 +1,33 @@
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# App history & runtime logs
+data/history/*
+!data/history/.gitkeep
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Node / Build artifacts
+node_modules/
+dist/
+build/
+coverage/
+.env*
+!.env.example
