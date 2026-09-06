@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Recaller — Single-Command Launch Script for Linux
+# Recaller — Single-Command Launch Script for Linux / Termux (Android)
 # ==============================================================================
 
 set -e
@@ -25,7 +25,7 @@ elif command -v python &>/dev/null; then
     PYTHON_CMD="python"
 else
     echo "❌ Ошибка: Python 3 не найден в вашей системе."
-    echo "Установите python3 командой: sudo apt install python3 (Linux)"
+    echo "Установите python3 командой: sudo apt install python3 (Linux) или pkg install python (Termux)"
     exit 1
 fi
 
@@ -35,7 +35,7 @@ echo "🔍 Найдена версия: $($PYTHON_CMD --version)"
 if [ ! -d ".venv" ]; then
     echo "📦 Создание изолированного виртуального окружения (.venv)..."
     $PYTHON_CMD -m venv .venv || {
-        echo "⚠️ Не удалось создать venv напрямую. Пробуем продолжать с глобальным Python..."
+        echo "⚠️ Не удалось создать venv напрямую. Пробуем продолжать с системным Python..."
     }
 fi
 
@@ -46,9 +46,11 @@ fi
 
 # Install dependencies if missing
 if ! python -c "import fastapi, uvicorn" &>/dev/null; then
-    echo "📥 Установка минимальных зависимостей (fastapi, uvicorn)..."
+    echo "📥 Попытка установки зависимостей (fastapi, uvicorn)..."
     pip install --upgrade pip --quiet 2>/dev/null || true
-    pip install -r requirements.txt
+    pip install -r requirements.txt 2>/dev/null || {
+        echo "⚡ Зависимости pip не удалось скомпилировать. Сервер автоматически запустится на встроенном Python!"
+    }
 fi
 
 echo ""

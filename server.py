@@ -8,18 +8,13 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 # Force UTF-8 encoding for stdout/stderr (resolves Windows cp1251 charmap emoji print issues)
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-import uvicorn
 
 # Setup base paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -133,118 +128,17 @@ def seed_demo_tests_if_empty():
 
 seed_demo_tests_if_empty()
 
-# FastAPI Application
-app = FastAPI(title="Recaller API", version="1.0.0")
+# Check for FastAPI / Uvicorn availability
+HAS_FASTAPI = False
+try:
+    from fastapi import FastAPI, HTTPException, Body
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse, JSONResponse
+    import uvicorn
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
 
-# ==============================================================================
-# REST API ENDPOINTS
-# ==============================================================================
-
-@app.get("/api/tests")
-def get_tests():
-    """Retrieve list of all saved tests from data/tests/*.json"""
-    tests = []
-    for filepath in TESTS_DIR.glob("*.json"):
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                tests.append(data)
-        except Exception as e:
-            print(f"⚠️ Ошибка чтения файла тестов {filepath}: {e}")
-    
-    # Sort alphabetically by title
-    tests.sort(key=lambda x: str(x.get("title", "")).lower())
-    return tests
-
-@app.post("/api/tests")
-def save_test(test_data: Dict[str, Any] = Body(...)):
-    """Save or update a test in data/tests/{id}.json"""
-    test_id = test_data.get("id")
-    if not test_id or not str(test_id).strip():
-        title = test_data.get("title", "test")
-        test_id = re.sub(r'[^a-z0-9а-яё]', '-', title.lower()).strip('-')[:32] or f"test-{int(time.time())}"
-        test_data["id"] = test_id
-
-    filename = f"{test_id}.json"
-    filepath = TESTS_DIR / filename
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(test_data, f, ensure_ascii=False, indent=2)
-
-    return test_data
-
-@app.delete("/api/tests/{test_id}")
-def delete_test(test_id: str):
-    """Delete a test file by ID from data/tests/"""
-    filepath = TESTS_DIR / f"{test_id}.json"
-    if filepath.exists():
-        filepath.unlink()
-        return {"status": "ok", "deleted": test_id}
-    
-    # Fallback search for stem matching
-    for f in TESTS_DIR.glob("*.json"):
-        if f.stem == test_id:
-            f.unlink()
-            return {"status": "ok", "deleted": test_id}
-
-    raise HTTPException(status_code=404, detail="Тест не найден")
-
-@app.get("/api/history")
-def get_history():
-    """Retrieve history of attempts from data/history/history.json"""
-    if not HISTORY_FILE.exists():
-        return []
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"⚠️ Ошибка чтения истории {HISTORY_FILE}: {e}")
-        return []
-
-@app.post("/api/history")
-def record_attempt(attempt: Dict[str, Any] = Body(...)):
-    """Record a completed test attempt into data/history/history.json"""
-    history = []
-    if HISTORY_FILE.exists():
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        except Exception:
-            history = []
-    
-    # Insert new attempt at top
-    history.insert(0, attempt)
-    
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
-
-    return attempt
-
-@app.delete("/api/history")
-def clear_history():
-    """Clear all attempt history in data/history/history.json"""
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump([], f, ensure_ascii=False, indent=2)
-    return {"status": "ok"}
-
-# ==============================================================================
-# FRONTEND STATIC FILES & SPA ROUTING
-# ==============================================================================
-
-@app.get("/")
-def read_root():
-    """Serve single page application main index.html"""
-    index_path = STATIC_DIR / "index.html"
-    if not index_path.exists():
-        index_path = BASE_DIR / "index.html"
-    return FileResponse(index_path)
-
-# Mount static assets (style.css, app.js, images, etc.)
-if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
-
-# ==============================================================================
-# HELPER FOR AUTO-OPENING BROWSER & SERVER LAUNCH
-# ==============================================================================
 
 def get_local_ip():
     try:
@@ -255,6 +149,7 @@ def get_local_ip():
         return ip
     except Exception:
         return "127.0.0.1"
+
 
 def open_browser_async():
     time.sleep(1.2)
@@ -270,6 +165,240 @@ def open_browser_async():
     except Exception:
         pass
 
+
+# ==============================================================================
+# OPTION A: FASTAPI IMPLEMENTATION (Used if FastAPI & Uvicorn are installed)
+# ==============================================================================
+
+if HAS_FASTAPI:
+    app = FastAPI(title="Recaller API", version="1.0.0")
+
+    @app.get("/api/tests")
+    def get_tests():
+        tests = []
+        for filepath in TESTS_DIR.glob("*.json"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    tests.append(json.load(f))
+            except Exception as e:
+                print(f"⚠️ Ошибка чтения файла тестов {filepath}: {e}")
+        tests.sort(key=lambda x: str(x.get("title", "")).lower())
+        return tests
+
+    @app.post("/api/tests")
+    def save_test(test_data: dict = Body(...)):
+        test_id = test_data.get("id")
+        if not test_id or not str(test_id).strip():
+            title = test_data.get("title", "test")
+            test_id = re.sub(r'[^a-z0-9а-яё]', '-', title.lower()).strip('-')[:32] or f"test-{int(time.time())}"
+            test_data["id"] = test_id
+
+        filepath = TESTS_DIR / f"{test_id}.json"
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(test_data, f, ensure_ascii=False, indent=2)
+
+        return test_data
+
+    @app.delete("/api/tests/{test_id}")
+    def delete_test(test_id: str):
+        filepath = TESTS_DIR / f"{test_id}.json"
+        if filepath.exists():
+            filepath.unlink()
+            return {"status": "ok", "deleted": test_id}
+        for f in TESTS_DIR.glob("*.json"):
+            if f.stem == test_id:
+                f.unlink()
+                return {"status": "ok", "deleted": test_id}
+        raise HTTPException(status_code=404, detail="Тест не найден")
+
+    @app.get("/api/history")
+    def get_history():
+        if not HISTORY_FILE.exists():
+            return []
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Ошибка чтения истории {HISTORY_FILE}: {e}")
+            return []
+
+    @app.post("/api/history")
+    def record_attempt(attempt: dict = Body(...)):
+        history = []
+        if HISTORY_FILE.exists():
+            try:
+                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
+        history.insert(0, attempt)
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        return attempt
+
+    @app.delete("/api/history")
+    def clear_history():
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        return {"status": "ok"}
+
+    @app.get("/")
+    def read_root():
+        index_path = STATIC_DIR / "index.html"
+        if not index_path.exists():
+            index_path = BASE_DIR / "index.html"
+        return FileResponse(index_path)
+
+    if STATIC_DIR.exists():
+        app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+
+    def run_server():
+        threading.Thread(target=open_browser_async, daemon=True).start()
+        uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
+
+# ==============================================================================
+# OPTION B: ZERO-DEPENDENCY STDLIB HTTP.SERVER (Fallback for Termux / offline)
+# ==============================================================================
+
+else:
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class FallbackHTTPRequestHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            # Clean single line log format
+            print(f"INFO: {self.address_string()} - \"{self.requestline}\" {args[0]}")
+
+        def send_json(self, data, status=200):
+            body = json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            if path == '/api/tests':
+                tests = []
+                for filepath in TESTS_DIR.glob("*.json"):
+                    try:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            tests.append(json.load(f))
+                    except Exception:
+                        pass
+                tests.sort(key=lambda x: str(x.get("title", "")).lower())
+                return self.send_json(tests)
+
+            elif path == '/api/history':
+                if not HISTORY_FILE.exists():
+                    return self.send_json([])
+                try:
+                    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                        return self.send_json(json.load(f))
+                except Exception:
+                    return self.send_json([])
+
+            # Static files routing
+            file_rel = 'index.html' if path == '/' else path.lstrip('/')
+            file_path = STATIC_DIR / file_rel
+
+            if not file_path.exists() and path == '/':
+                file_path = BASE_DIR / 'index.html'
+
+            if file_path.exists() and file_path.is_file():
+                content_type = 'text/html; charset=utf-8'
+                if file_path.suffix == '.css':
+                    content_type = 'text/css; charset=utf-8'
+                elif file_path.suffix == '.js':
+                    content_type = 'application/javascript; charset=utf-8'
+                elif file_path.suffix == '.json':
+                    content_type = 'application/json; charset=utf-8'
+                elif file_path.suffix == '.svg':
+                    content_type = 'image/svg+xml'
+
+                try:
+                    with open(file_path, 'rb') as f:
+                        body = f.read()
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                except Exception as e:
+                    return self.send_json({'error': str(e)}, 500)
+
+            return self.send_json({'detail': 'Not found'}, 404)
+
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+            length = int(self.headers.get('Content-Length', 0))
+            body_bytes = self.rfile.read(length)
+            
+            try:
+                payload = json.loads(body_bytes.decode('utf-8')) if body_bytes else {}
+            except Exception:
+                return self.send_json({'error': 'Invalid JSON'}, 400)
+
+            if path == '/api/tests':
+                test_id = payload.get("id")
+                if not test_id or not str(test_id).strip():
+                    title = payload.get("title", "test")
+                    test_id = re.sub(r'[^a-z0-9а-яё]', '-', title.lower()).strip('-')[:32] or f"test-{int(time.time())}"
+                    payload["id"] = test_id
+
+                filepath = TESTS_DIR / f"{test_id}.json"
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                return self.send_json(payload)
+
+            elif path == '/api/history':
+                history = []
+                if HISTORY_FILE.exists():
+                    try:
+                        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                            history = json.load(f)
+                    except Exception:
+                        history = []
+                history.insert(0, payload)
+                with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                    json.dump(history, f, ensure_ascii=False, indent=2)
+                return self.send_json(payload)
+
+            return self.send_json({'detail': 'Not found'}, 404)
+
+        def do_DELETE(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            if path.startswith('/api/tests/'):
+                test_id = path.replace('/api/tests/', '').strip()
+                filepath = TESTS_DIR / f"{test_id}.json"
+                if filepath.exists():
+                    filepath.unlink()
+                    return self.send_json({"status": "ok", "deleted": test_id})
+                for f in TESTS_DIR.glob("*.json"):
+                    if f.stem == test_id:
+                        f.unlink()
+                        return self.send_json({"status": "ok", "deleted": test_id})
+                return self.send_json({'detail': 'Not found'}, 404)
+
+            elif path == '/api/history':
+                with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+                return self.send_json({"status": "ok"})
+
+            return self.send_json({'detail': 'Not found'}, 404)
+
+    def run_server():
+        print("⚡ FastAPI не обнаружен. Запуск автономного веб-сервера Python (0 зависимостей)...")
+        threading.Thread(target=open_browser_async, daemon=True).start()
+        httpd = HTTPServer(('0.0.0.0', 8000), FallbackHTTPRequestHandler)
+        httpd.serve_forever()
+
 if __name__ == "__main__":
-    threading.Thread(target=open_browser_async, daemon=True).start()
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
+    run_server()
