@@ -160,6 +160,8 @@ def open_browser_async():
     print(f" 📱 Сетевой адрес (Linux/Wi-Fi): http://{local_ip}:8000")
     print(" 💾 Данные сохраняются в data/tests/ и data/history/")
     print("═"*58 + "\n")
+    if os.environ.get("NO_BROWSER"):
+        return
     try:
         webbrowser.open("http://localhost:8000")
     except Exception:
@@ -198,6 +200,38 @@ if HAS_FASTAPI:
             json.dump(test_data, f, ensure_ascii=False, indent=2)
 
         return test_data
+
+    @app.get("/api/tests/{test_id}")
+    def get_test(test_id: str):
+        filepath = TESTS_DIR / f"{test_id}.json"
+        if not filepath.exists():
+            for f in TESTS_DIR.glob("*.json"):
+                if f.stem == test_id:
+                    filepath = f
+                    break
+        if filepath.exists():
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Ошибка чтения теста: {e}")
+        raise HTTPException(status_code=404, detail="Тест не найден")
+
+    @app.get("/api/tests/{test_id}/export")
+    def export_test(test_id: str):
+        filepath = TESTS_DIR / f"{test_id}.json"
+        if not filepath.exists():
+            for f in TESTS_DIR.glob("*.json"):
+                if f.stem == test_id:
+                    filepath = f
+                    break
+        if filepath.exists():
+            return FileResponse(
+                filepath,
+                media_type="application/json",
+                filename=f"{test_id}.json"
+            )
+        raise HTTPException(status_code=404, detail="Тест не найден")
 
     @app.delete("/api/tests/{test_id}")
     def delete_test(test_id: str):
@@ -291,6 +325,35 @@ else:
                         pass
                 tests.sort(key=lambda x: str(x.get("title", "")).lower())
                 return self.send_json(tests)
+
+            elif path.startswith('/api/tests/'):
+                subpath = path[len('/api/tests/'):].strip('/')
+                is_export = subpath.endswith('/export')
+                test_id = subpath[:-len('/export')].strip('/') if is_export else subpath
+
+                filepath = TESTS_DIR / f"{test_id}.json"
+                if not filepath.exists():
+                    for f in TESTS_DIR.glob("*.json"):
+                        if f.stem == test_id:
+                            filepath = f
+                            break
+
+                if filepath.exists():
+                    try:
+                        with open(filepath, "rb") as f:
+                            body = f.read()
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json; charset=utf-8')
+                        self.send_header('Content-Length', str(len(body)))
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        if is_export:
+                            self.send_header('Content-Disposition', f'attachment; filename="{test_id}.json"')
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+                    except Exception as e:
+                        return self.send_json({'error': str(e)}, 500)
+                return self.send_json({'detail': 'Тест не найден'}, 404)
 
             elif path == '/api/history':
                 if not HISTORY_FILE.exists():

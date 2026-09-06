@@ -95,13 +95,13 @@ const DEFAULT_DEMO_TESTS = [
 ];
 
 // ==============================================================================
-// 2. UTF-8 & BASE64 SAFE UTILITIES (Resolves Cyrillic / UTF-8 Latin1 defect)
+// 2. CODEC & VALIDATION UTILITIES (Clean JSON, UTF-8 & Base64)
 // ==============================================================================
-const Base64Util = {
+const TestCodec = {
   /**
    * Safely encode a UTF-8 string to Base64 (supporting Russian Cyrillic & emojis)
    */
-  encode(utf8Str) {
+  encodeBase64(utf8Str) {
     const bytes = new TextEncoder().encode(utf8Str);
     let binary = '';
     const len = bytes.byteLength;
@@ -114,7 +114,7 @@ const Base64Util = {
   /**
    * Safely decode a Base64 string to a UTF-8 string
    */
-  decode(base64Str) {
+  decodeBase64(base64Str) {
     const cleanStr = (base64Str || '')
       .trim()
       .replace(/^data:application\/json;base64,/, '')
@@ -182,7 +182,98 @@ const Base64Util = {
     data.default_timer_minutes = Number(data.default_timer_minutes) || 0;
 
     return data;
+  },
+
+  /**
+   * Parse import string: automatically detects plain JSON or Base64
+   * Returns: { format: 'json' | 'base64', data: validatedTestData }
+   */
+  parseImport(rawInput) {
+    const raw = (rawInput || '').trim();
+    if (!raw) {
+      throw new Error("Входная строка пуста. Вставьте чистый JSON теста или Base64-ключ.");
+    }
+
+    // Check if raw input looks like direct JSON or starts with { or [
+    const looksLikeJson = raw.startsWith('{') || raw.startsWith('[') || raw.includes('"title"') || raw.includes('"questions"');
+
+    if (looksLikeJson) {
+      try {
+        const parsed = JSON.parse(raw);
+        const validated = this.validateTest(parsed);
+        return { format: 'json', data: validated };
+      } catch (jsonErr) {
+        if (raw.startsWith('{')) {
+          throw new Error(`Ошибка в синтаксисе JSON: ${jsonErr.message}`);
+        }
+      }
+    }
+
+    // Try parsing as direct JSON anyway
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        const validated = this.validateTest(parsed);
+        return { format: 'json', data: validated };
+      }
+    } catch (_) {}
+
+    // Try decoding as Base64 UTF-8
+    try {
+      const decodedJsonStr = this.decodeBase64(raw);
+      const parsed = JSON.parse(decodedJsonStr);
+      const validated = this.validateTest(parsed);
+      return { format: 'base64', data: validated };
+    } catch (b64Err) {
+      if (looksLikeJson) {
+        throw new Error(`Не удалось разобрать JSON теста: ${b64Err.message}`);
+      }
+      throw new Error("Не удалось распознать формат. Поддерживаются чистый JSON ({...}) и Base64-ключ.");
+    }
+  },
+
+  /**
+   * Export test object to clean formatted JSON string
+   */
+  exportJson(testObj, pretty = true) {
+    return JSON.stringify(testObj, null, pretty ? 2 : undefined);
+  },
+
+  /**
+   * Export test object to Base64 UTF-8 string
+   */
+  exportBase64(testObj) {
+    const jsonStr = JSON.stringify(testObj, null, 2);
+    return this.encodeBase64(jsonStr);
+  },
+
+  /**
+   * Trigger browser file download
+   */
+  downloadFile(filename, content, mimeType = 'application/json;charset=utf-8') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 150);
   }
+};
+
+// Backwards compatibility alias for Base64Util
+const Base64Util = {
+  encode(s) { return TestCodec.encodeBase64(s); },
+  decode(s) { return TestCodec.decodeBase64(s); },
+  validateTest(d) { return TestCodec.validateTest(d); },
+  parseImport(s) { return TestCodec.parseImport(s); },
+  exportJson(t, p) { return TestCodec.exportJson(t, p); },
+  exportBase64(t) { return TestCodec.exportBase64(t); },
+  downloadFile(f, c, m) { return TestCodec.downloadFile(f, c, m); }
 };
 
 // ==============================================================================
@@ -514,6 +605,8 @@ const Router = {
 
     if (modalName === 'import_spec') {
       ImportSpecModal.init();
+    } else if (modalName === 'export') {
+      ExportModal.init(payload);
     } else if (modalName === 'prestart') {
       PrestartModal.init(payload);
     } else if (modalName === 'history') {
@@ -660,12 +753,12 @@ const DashboardView = {
                 </button>
 
                 <button 
-                  onclick="DashboardView.exportBase64('${escapeHtml(test.id)}')" 
+                  onclick="Router.openModal('export', '${escapeHtml(test.id)}')" 
                   class="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-[#F5F5F5] hover:bg-[#E5E5E5] text-[#171717] dark:bg-[#1F1F1F] dark:hover:bg-[#262626] dark:text-[#EDEDED] border border-[#E5E5E5] dark:border-[#262626] transition-colors"
-                  title="Экспорт в Base64 для передачи ключа"
+                  title="Экспорт теста: чистый JSON или Base64"
                 >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                  Base64
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  Экспорт
                 </button>
 
                 <button 
@@ -695,20 +788,11 @@ const DashboardView = {
   },
 
   exportBase64(testId) {
-    const test = AppState.tests.find(t => t.id === testId);
-    if (!test) return;
-    try {
-      const jsonStr = JSON.stringify(test, null, 2);
-      const b64 = Base64Util.encode(jsonStr);
-      navigator.clipboard.writeText(b64).then(() => {
-        showToast("Base64-ключ теста скопирован в буфер обмена!");
-      }).catch(() => {
-        // Fallback prompt
-        prompt("Скопируйте Base64-ключ теста:", b64);
-      });
-    } catch (e) {
-      showToast("Ошибка при кодировании теста: " + e.message, true);
-    }
+    Router.openModal('export', testId);
+  },
+
+  openExport(testId) {
+    Router.openModal('export', testId);
   },
 
   confirmDelete() {
@@ -730,7 +814,7 @@ const DashboardView = {
 };
 
 // ==============================================================================
-// 8. BASE64 IMPORT & SPECIFICATION MODAL (Screen 2)
+// 8. TEST IMPORT & SPECIFICATION MODAL (Screen 2)
 // ==============================================================================
 const ImportSpecModal = {
   currentTab: 'import', // 'import' or 'spec'
@@ -740,6 +824,8 @@ const ImportSpecModal = {
     this.renderTabs();
     const input = document.getElementById('base64-import-input');
     if (input) input.value = '';
+    const fileInput = document.getElementById('import-file-input');
+    if (fileInput) fileInput.value = '';
     const preview = document.getElementById('import-preview-box');
     if (preview) preview.classList.add('hidden');
     const errBox = document.getElementById('import-error-box');
@@ -758,15 +844,110 @@ const ImportSpecModal = {
     const panelSpec = document.getElementById('tab-panel-spec');
 
     if (this.currentTab === 'import') {
-      btnImport.className = "flex-1 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400";
-      btnSpec.className = "flex-1 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 border-b-2 border-transparent";
+      btnImport.className = "flex-1 py-2.5 text-xs sm:text-sm font-semibold border-b-2 border-[#171717] dark:border-[#EDEDED] text-[#171717] dark:text-[#EDEDED] transition-colors";
+      btnSpec.className = "flex-1 py-2.5 text-xs sm:text-sm font-medium text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] border-b-2 border-transparent transition-colors";
       panelImport.classList.remove('hidden');
       panelSpec.classList.add('hidden');
     } else {
-      btnSpec.className = "flex-1 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400";
-      btnImport.className = "flex-1 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 border-b-2 border-transparent";
+      btnSpec.className = "flex-1 py-2.5 text-xs sm:text-sm font-semibold border-b-2 border-[#171717] dark:border-[#EDEDED] text-[#171717] dark:text-[#EDEDED] transition-colors";
+      btnImport.className = "flex-1 py-2.5 text-xs sm:text-sm font-medium text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] border-b-2 border-transparent transition-colors";
       panelSpec.classList.remove('hidden');
       panelImport.classList.add('hidden');
+    }
+  },
+
+  onFileInputChange(event) {
+    const file = event.target.files && event.target.files[0];
+    if (file) {
+      this.handleFile(file);
+    }
+  },
+
+  handleFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const inputEl = document.getElementById('base64-import-input');
+      if (inputEl) {
+        inputEl.value = text;
+      }
+      showToast(`Файл «${file.name}» загружен`);
+      this.previewInput();
+    };
+    reader.onerror = () => {
+      showToast("Ошибка при чтении файла", true);
+    };
+    reader.readAsText(file, 'utf-8');
+  },
+
+  onDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropZone = document.getElementById('import-drop-zone');
+    if (dropZone) dropZone.classList.add('border-[#171717]', 'dark:border-[#EDEDED]', 'bg-[#F5F5F5]', 'dark:bg-[#1A1A1A]');
+  },
+
+  onDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropZone = document.getElementById('import-drop-zone');
+    if (dropZone) dropZone.classList.remove('border-[#171717]', 'dark:border-[#EDEDED]', 'bg-[#F5F5F5]', 'dark:bg-[#1A1A1A]');
+  },
+
+  onDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropZone = document.getElementById('import-drop-zone');
+    if (dropZone) dropZone.classList.remove('border-[#171717]', 'dark:border-[#EDEDED]', 'bg-[#F5F5F5]', 'dark:bg-[#1A1A1A]');
+
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) {
+      this.handleFile(files[0]);
+    }
+  },
+
+  previewInput() {
+    const inputEl = document.getElementById('base64-import-input');
+    const errBox = document.getElementById('import-error-box');
+    const previewBox = document.getElementById('import-preview-box');
+    const rawValue = (inputEl ? inputEl.value : '').trim();
+
+    if (!rawValue) {
+      if (errBox) errBox.classList.add('hidden');
+      if (previewBox) previewBox.classList.add('hidden');
+      return;
+    }
+
+    try {
+      const res = TestCodec.parseImport(rawValue);
+      const validated = res.data;
+      const formatBadge = res.format === 'json'
+        ? '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900">Чистый JSON</span>'
+        : '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-900">Base64-ключ</span>';
+
+      if (errBox) errBox.classList.add('hidden');
+      if (previewBox) {
+        previewBox.innerHTML = `
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400">✓ Формат распознан и проверен:</span>
+            ${formatBadge}
+          </div>
+          <div class="text-sm font-bold text-[#171717] dark:text-[#EDEDED]">${escapeHtml(validated.title)}</div>
+          <div class="text-xs text-[#737373] dark:text-[#A3A3A3] mt-1">
+            Вопросов: <strong class="text-[#171717] dark:text-[#EDEDED]">${validated.questions.length}</strong> • 
+            Теги: ${(validated.tags || []).join(', ') || 'нет'} • 
+            ID: <code class="font-mono text-[11px]">${escapeHtml(validated.id)}</code>
+          </div>
+        `;
+        previewBox.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (previewBox) previewBox.classList.add('hidden');
+      if (errBox) {
+        errBox.textContent = "Ошибка проверки: " + err.message;
+        errBox.classList.remove('hidden');
+      }
     }
   },
 
@@ -780,28 +961,21 @@ const ImportSpecModal = {
     previewBox.classList.add('hidden');
 
     if (!rawValue) {
-      errBox.textContent = "Пожалуйста, вставьте Base64 строку теста.";
+      errBox.textContent = "Пожалуйста, вставьте чистый JSON или Base64-строку теста.";
       errBox.classList.remove('hidden');
       return;
     }
 
     try {
-      const decodedJsonStr = Base64Util.decode(rawValue);
-      const parsedData = JSON.parse(decodedJsonStr);
-      const validated = Base64Util.validateTest(parsedData);
-
-      // Show preview
-      previewBox.innerHTML = `
-        <div class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1">✓ Ключ успешно декодирован и валидирован:</div>
-        <div class="text-sm font-bold text-slate-900 dark:text-slate-100">${escapeHtml(validated.title)}</div>
-        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Вопросов: ${validated.questions.length} • Теги: ${(validated.tags || []).join(', ') || 'нет'}</div>
-      `;
-      previewBox.classList.remove('hidden');
+      const res = TestCodec.parseImport(rawValue);
+      const validated = res.data;
+      const formatTitle = res.format === 'json' ? 'чистого JSON' : 'Base64';
 
       // Save to store
       DataStore.saveTest(validated).then(() => {
         Router.closeModal();
         DashboardView.render();
+        showToast(`Тест «${validated.title}» успешно импортирован (${formatTitle})!`);
       });
     } catch (err) {
       errBox.textContent = "Ошибка импорта: " + err.message;
@@ -812,12 +986,15 @@ const ImportSpecModal = {
   copySpecification() {
     const specText = `# Спецификация JSON-схемы теста Recaller
 
-Формат обмена: строка Base64 в кодировке UTF-8.
+Форматы импорта и экспорта:
+1. Чистый JSON (файлы .json или текстовый JSON)
+2. Строка Base64 (в кодировке UTF-8)
+
 Обязательные поля:
-- "id": уникальный идентификатор теста (строка slug или uuid).
+- "id": уникальный идентификатор теста (строка slug или uuid, опционально).
 - "title": название темы или теста (строка).
 - "tags": массив тегов (строки).
-- "default_timer_minutes": рекомендуемое время в минутах (число).
+- "default_timer_minutes": рекомендуемое время в минутах (число, 0 — без ограничений).
 - "questions": массив вопросов (минимум 1).
 
 Формат вопросов:
@@ -830,7 +1007,7 @@ const ImportSpecModal = {
    - "correct": массив допустимых строковых ответов (регистр и пробелы игнорируются).
    - "explanation": подробное пояснение правильного ответа.
 
-Пример JSON-шаблона:
+Пример чистого JSON-шаблона:
 {
   "id": "linux-basics",
   "title": "Основы Linux",
@@ -861,14 +1038,127 @@ const ImportSpecModal = {
     });
   },
 
+  copyDemoJson() {
+    const sample = DEFAULT_DEMO_TESTS[0];
+    const jsonStr = TestCodec.exportJson(sample, true);
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      showToast("Демо-тест в чистом JSON скопирован и вставлен в поле!");
+    }).catch(() => {});
+    const input = document.getElementById('base64-import-input');
+    if (input) {
+      input.value = jsonStr;
+      this.previewInput();
+    }
+  },
+
   copyDemoBase64Key() {
     const sample = DEFAULT_DEMO_TESTS[0];
-    const b64 = Base64Util.encode(JSON.stringify(sample, null, 2));
+    const b64 = TestCodec.exportBase64(sample);
     navigator.clipboard.writeText(b64).then(() => {
-      showToast("Демо-ключ скопирован! Теперь вставьте его в поле ввода.");
-      const input = document.getElementById('base64-import-input');
-      if (input) input.value = b64;
-    });
+      showToast("Демо-ключ Base64 скопирован и вставлен в поле!");
+    }).catch(() => {});
+    const input = document.getElementById('base64-import-input');
+    if (input) {
+      input.value = b64;
+      this.previewInput();
+    }
+  }
+};
+
+// ==============================================================================
+// 8B. TEST EXPORT MODAL
+// ==============================================================================
+const ExportModal = {
+  currentTestId: null,
+  currentFormat: 'json', // 'json' or 'base64'
+
+  init(testId) {
+    this.currentTestId = testId;
+    this.currentFormat = 'json';
+    const test = AppState.tests.find(t => t.id === testId);
+    if (!test) {
+      showToast("Тест не найден", true);
+      Router.closeModal();
+      return;
+    }
+
+    const titleEl = document.getElementById('export-modal-test-title');
+    if (titleEl) titleEl.textContent = test.title || test.id;
+
+    const subtitleEl = document.getElementById('export-modal-test-subtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent = `Вопросов: ${test.questions ? test.questions.length : 0} • Теги: ${(test.tags || []).join(', ') || 'нет'} • ID: ${test.id}`;
+    }
+
+    this.switchFormat('json');
+  },
+
+  switchFormat(format) {
+    this.currentFormat = format;
+    const test = AppState.tests.find(t => t.id === this.currentTestId);
+    if (!test) return;
+
+    const btnJson = document.getElementById('export-tab-btn-json');
+    const btnB64 = document.getElementById('export-tab-btn-base64');
+    const previewEl = document.getElementById('export-preview-content');
+    const btnCopy = document.getElementById('export-action-copy-btn');
+    const btnDownload = document.getElementById('export-action-download-btn');
+
+    if (format === 'json') {
+      if (btnJson) btnJson.className = "flex-1 py-2 text-xs sm:text-sm font-semibold border-b-2 border-[#171717] dark:border-[#EDEDED] text-[#171717] dark:text-[#EDEDED] transition-colors";
+      if (btnB64) btnB64.className = "flex-1 py-2 text-xs sm:text-sm font-medium text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] border-b-2 border-transparent transition-colors";
+      if (previewEl) {
+        previewEl.value = TestCodec.exportJson(test, true);
+      }
+      if (btnCopy) btnCopy.textContent = "Скопировать JSON";
+      if (btnDownload) btnDownload.textContent = "Скачать .json файл";
+    } else {
+      if (btnB64) btnB64.className = "flex-1 py-2 text-xs sm:text-sm font-semibold border-b-2 border-[#171717] dark:border-[#EDEDED] text-[#171717] dark:text-[#EDEDED] transition-colors";
+      if (btnJson) btnJson.className = "flex-1 py-2 text-xs sm:text-sm font-medium text-[#737373] hover:text-[#171717] dark:text-[#A3A3A3] dark:hover:text-[#EDEDED] border-b-2 border-transparent transition-colors";
+      if (previewEl) {
+        previewEl.value = TestCodec.exportBase64(test);
+      }
+      if (btnCopy) btnCopy.textContent = "Скопировать Base64";
+      if (btnDownload) btnDownload.textContent = "Скачать .txt файл";
+    }
+  },
+
+  copyCurrent() {
+    const test = AppState.tests.find(t => t.id === this.currentTestId);
+    if (!test) return;
+
+    if (this.currentFormat === 'json') {
+      const jsonText = TestCodec.exportJson(test, true);
+      navigator.clipboard.writeText(jsonText).then(() => {
+        showToast("Чистый JSON скопирован в буфер обмена!");
+      }).catch(() => {
+        prompt("Скопируйте JSON:", jsonText);
+      });
+    } else {
+      const b64Text = TestCodec.exportBase64(test);
+      navigator.clipboard.writeText(b64Text).then(() => {
+        showToast("Base64-ключ скопирован в буфер обмена!");
+      }).catch(() => {
+        prompt("Скопируйте Base64-ключ:", b64Text);
+      });
+    }
+  },
+
+  downloadCurrent() {
+    const test = AppState.tests.find(t => t.id === this.currentTestId);
+    if (!test) return;
+
+    const safeFilename = (test.id || 'test').replace(/[^a-z0-9а-яё_-]/gi, '_');
+
+    if (this.currentFormat === 'json') {
+      const jsonText = TestCodec.exportJson(test, true);
+      TestCodec.downloadFile(`${safeFilename}.json`, jsonText, 'application/json;charset=utf-8');
+      showToast(`Файл ${safeFilename}.json скачивается...`);
+    } else {
+      const b64Text = TestCodec.exportBase64(test);
+      TestCodec.downloadFile(`${safeFilename}_base64.txt`, b64Text, 'text/plain;charset=utf-8');
+      showToast(`Файл ${safeFilename}_base64.txt скачивается...`);
+    }
   }
 };
 
@@ -1215,6 +1505,39 @@ const BuilderView = {
     DataStore.saveTest(testPayload).then(() => {
       Router.navigate('dashboard');
     });
+  },
+
+  exportCurrentJson() {
+    const title = (document.getElementById('builder-title')?.value || '').trim();
+    if (!title) {
+      showToast("Укажите хотя бы название теста для экспорта!", true);
+      return;
+    }
+    const tagsRaw = (document.getElementById('builder-tags')?.value || '').trim();
+    const timerVal = Number(document.getElementById('builder-timer')?.value) || 0;
+    const tags = tagsRaw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+    const testId = AppState.builder.editingId ||
+      title.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '-').slice(0, 32) || `test-${Date.now()}`;
+
+    const testPayload = {
+      id: testId,
+      title: title,
+      tags: tags,
+      default_timer_minutes: timerVal,
+      questions: AppState.builder.questions.map((q, idx) => ({
+        id: idx + 1,
+        type: q.type,
+        text: (q.text || '').trim(),
+        options: q.type === 'choice' ? (q.options || []).map(o => (o || '').trim()) : undefined,
+        correct: q.correct,
+        explanation: (q.explanation || '').trim()
+      }))
+    };
+
+    const jsonStr = TestCodec.exportJson(testPayload, true);
+    TestCodec.downloadFile(`${testId}.json`, jsonStr);
+    showToast(`Файл ${testId}.json экспортирован и скачивается!`);
   }
 };
 
