@@ -114,6 +114,80 @@ DEFAULT_DEMO_TESTS = [
                 "explanation": "`display: flex` (Flexbox) предназначен для распределения элементов вдоль главной оси."
             }
         ]
+    },
+    {
+        "id": "math-analysis-basics",
+        "title": "Основы математического анализа и алгебры",
+        "tags": ["math", "algebra", "calculus", "analysis"],
+        "default_timer_minutes": 8,
+        "questions": [
+            {
+                "id": 1,
+                "type": "choice",
+                "text": "Чему равна производная произведения функций $f(x) = x \\cdot e^x$?",
+                "options": [
+                    "$e^x(x + 1)$",
+                    "$x \\cdot e^x$",
+                    "$e^x + x$",
+                    "$x^2 \\cdot e^{x-1}$"
+                ],
+                "correct": [0],
+                "explanation": "По правилу дифференцирования произведения $(u \\cdot v)' = u'v + u v'$. Имеем: $(x)' = 1$, $(e^x)' = e^x$. Следовательно: $f'(x) = 1 \\cdot e^x + x \\cdot e^x = e^x(x + 1)$."
+            },
+            {
+                "id": 2,
+                "type": "input",
+                "text": "Вычислите первый замечательный предел:\n\n$$\\lim_{x \\to 0} \\frac{\\sin(2x)}{x}$$\n\nВведите целое число:",
+                "correct": ["2"],
+                "explanation": "Используем первый замечательный предел $\\lim_{t \\to 0} \\frac{\\sin t}{t} = 1$ при $t = 2x$:\n\n$$\\lim_{x \\to 0} \\frac{\\sin(2x)}{x} = 2 \\cdot \\lim_{x \\to 0} \\frac{\\sin(2x)}{2x} = 2 \\cdot 1 = 2.$$"
+            },
+            {
+                "id": 3,
+                "type": "choice",
+                "text": "Какая формула определяет корни квадратного уравнения $ax^2 + bx + c = 0$ при положительном дискриминанте $D = b^2 - 4ac > 0$?",
+                "options": [
+                    "$x_{1,2} = \\frac{-b \\pm \\sqrt{D}}{2a}$",
+                    "$x_{1,2} = \\frac{-b \\pm D}{2a}$",
+                    "$x_{1,2} = \\frac{b \\pm \\sqrt{D}}{2a}$",
+                    "$x_{1,2} = \\frac{-b \\pm \\sqrt{D}}{a}$"
+                ],
+                "correct": [0],
+                "explanation": "Стандартная формула корней квадратного уравнения через дискриминант: $x_{1,2} = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} = \\frac{-b \\pm \\sqrt{D}}{2a}$."
+            },
+            {
+                "id": 4,
+                "type": "choice",
+                "text": "Какие из представленных формул тождественно выражают косинус двойного угла $\\cos(2\\alpha)$? (Выберите все верные варианты)",
+                "options": [
+                    "$\\cos^2(\\alpha) - \\sin^2(\\alpha)$",
+                    "$2\\cos^2(\\alpha) - 1$",
+                    "$2\\sin(\\alpha)\\cos(\\alpha)$",
+                    "$1 - 2\\sin^2(\\alpha)$"
+                ],
+                "correct": [0, 1, 3],
+                "explanation": "Формула косинуса двойного угла: $\\cos(2\\alpha) = \\cos^2(\\alpha) - \\sin^2(\\alpha)$. Используя основное тригонометрическое тождество $\\sin^2(\\alpha) + \\cos^2(\\alpha) = 1$, получаем эквивалентные формы: $2\\cos^2(\\alpha) - 1$ и $1 - 2\\sin^2(\\alpha)$. Выражение $2\\sin(\\alpha)\\cos(\\alpha)$ задает $\\sin(2\\alpha)$."
+            },
+            {
+                "id": 5,
+                "type": "choice",
+                "text": "Чему равен табличный неопределенный интеграл:\n\n$$\\int \\frac{1}{1 + x^2} \\, dx$$",
+                "options": [
+                    "$\\arctan(x) + C$",
+                    "$\\ln(1 + x^2) + C$",
+                    "$\\arcsin(x) + C$",
+                    "$\\frac{1}{2x} + C$"
+                ],
+                "correct": [0],
+                "explanation": "Поскольку $(\\arctan x)' = \\frac{1}{1 + x^2}$, табличный интеграл равен $\\int \\frac{dx}{1 + x^2} = \\arctan(x) + C$."
+            },
+            {
+                "id": 6,
+                "type": "input",
+                "text": "Вычислите определитель матрицы $A$ второго порядка:\n\n$$A = \\begin{pmatrix} 3 & 4 \\\\ 2 & 5 \\end{pmatrix}$$\n\nВведите числовое значение:",
+                "correct": ["7"],
+                "explanation": "Определитель матрицы $2 \\times 2$ вычисляется по формуле $\\det(A) = ad - bc$:\n\n$$\\det(A) = 3 \\cdot 5 - 4 \\cdot 2 = 15 - 8 = 7.$$"
+            }
+        ]
     }
 ]
 
