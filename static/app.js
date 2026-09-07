@@ -831,6 +831,10 @@ const DashboardView = {
           }
               </div>
 
+              ${test.description ? `
+                <p class="text-xs text-[#737373] dark:text-[#A3A3A3] mb-3 line-clamp-2 leading-relaxed">${escapeHtml(test.description)}</p>
+              ` : ''}
+
               <div class="flex flex-wrap gap-1.5 mb-4">
                 ${tagsList || '<span class="text-xs text-[#A3A3A3]">Без тегов</span>'}
               </div>
@@ -1297,6 +1301,7 @@ const BuilderView = {
     AppState.builder = {
       editingId: null,
       title: '',
+      description: '',
       tags: '',
       defaultTimerMinutes: 5,
       questions: [
@@ -1310,6 +1315,7 @@ const BuilderView = {
         }
       ]
     };
+    this.populateHeaderInputs();
     Router.navigate('builder');
   },
 
@@ -1320,6 +1326,7 @@ const BuilderView = {
     AppState.builder = {
       editingId: test.id,
       title: test.title || '',
+      description: test.description || '',
       tags: (test.tags || []).join(', '),
       defaultTimerMinutes: Number(test.default_timer_minutes) || 0,
       questions: JSON.parse(JSON.stringify(test.questions || []))
@@ -1334,12 +1341,69 @@ const BuilderView = {
         explanation: ''
       });
     }
+    this.populateHeaderInputs();
     Router.navigate('builder');
   },
 
+  populateHeaderInputs() {
+    const inputTitle = document.getElementById('builder-title');
+    const inputDesc = document.getElementById('builder-description');
+    const inputTags = document.getElementById('builder-tags');
+    const inputTimer = document.getElementById('builder-timer');
+
+    if (inputTitle) inputTitle.value = AppState.builder?.title || '';
+    if (inputDesc) inputDesc.value = AppState.builder?.description || '';
+    if (inputTags) inputTags.value = AppState.builder?.tags || '';
+    if (inputTimer) inputTimer.value = AppState.builder?.defaultTimerMinutes ?? 5;
+  },
+
+  syncFromDOM() {
+    if (!AppState.builder) return;
+
+    const inputTitle = document.getElementById('builder-title');
+    if (inputTitle) AppState.builder.title = inputTitle.value;
+
+    const inputDesc = document.getElementById('builder-description');
+    if (inputDesc) AppState.builder.description = inputDesc.value;
+
+    const inputTags = document.getElementById('builder-tags');
+    if (inputTags) AppState.builder.tags = inputTags.value;
+
+    const inputTimer = document.getElementById('builder-timer');
+    if (inputTimer) {
+      const parsed = parseInt(inputTimer.value, 10);
+      AppState.builder.defaultTimerMinutes = isNaN(parsed) ? 0 : parsed;
+    }
+
+    // Sync question text, options, and explanations directly from DOM elements
+    const qList = AppState.builder.questions || [];
+    qList.forEach((q, qIdx) => {
+      const qTextEl = document.getElementById(`builder-q-text-${qIdx}`);
+      if (qTextEl) q.text = qTextEl.value;
+
+      const qExplEl = document.getElementById(`builder-q-expl-${qIdx}`);
+      if (qExplEl) q.explanation = qExplEl.value;
+
+      if (q.type === 'choice' && Array.isArray(q.options)) {
+        q.options.forEach((_, optIdx) => {
+          const optEl = document.getElementById(`builder-q-${qIdx}-opt-${optIdx}`);
+          if (optEl) q.options[optIdx] = optEl.value;
+        });
+      } else if (q.type === 'input') {
+        const correctEl = document.getElementById(`builder-q-correct-${qIdx}`);
+        if (correctEl) {
+          q.correct = correctEl.value.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    });
+  },
+
   render() {
+    if (!AppState.builder) return;
+
     const titleHeader = document.getElementById('builder-header-title');
     const inputTitle = document.getElementById('builder-title');
+    const inputDesc = document.getElementById('builder-description');
     const inputTags = document.getElementById('builder-tags');
     const inputTimer = document.getElementById('builder-timer');
     const questionsContainer = document.getElementById('builder-questions-list');
@@ -1350,9 +1414,19 @@ const BuilderView = {
         : "Создание нового теста";
     }
 
-    if (inputTitle) inputTitle.value = AppState.builder.title;
-    if (inputTags) inputTags.value = AppState.builder.tags;
-    if (inputTimer) inputTimer.value = AppState.builder.defaultTimerMinutes;
+    // Keep header inputs synchronized without clobbering what user is currently typing
+    if (inputTitle && inputTitle.value !== (AppState.builder.title || '')) {
+      inputTitle.value = AppState.builder.title || '';
+    }
+    if (inputDesc && inputDesc.value !== (AppState.builder.description || '')) {
+      inputDesc.value = AppState.builder.description || '';
+    }
+    if (inputTags && inputTags.value !== (AppState.builder.tags || '')) {
+      inputTags.value = AppState.builder.tags || '';
+    }
+    if (inputTimer && (inputTimer.value === '' || Number(inputTimer.value) !== AppState.builder.defaultTimerMinutes)) {
+      inputTimer.value = AppState.builder.defaultTimerMinutes ?? 5;
+    }
 
     if (!questionsContainer) return;
 
@@ -1375,6 +1449,7 @@ const BuilderView = {
               <span class="text-xs font-mono text-[#737373] w-5 text-center">${optIdx + 1}.</span>
               <input 
                 type="text" 
+                id="builder-q-${qIndex}-opt-${optIdx}"
                 value="${escapeHtml(opt)}" 
                 placeholder="Вариант ответа ${optIdx + 1}" 
                 oninput="BuilderView.updateOptionText(${qIndex}, ${optIdx}, this.value)" 
@@ -1415,6 +1490,7 @@ const BuilderView = {
             </label>
             <input 
               type="text" 
+              id="builder-q-correct-${qIndex}"
               value="${escapeHtml(correctAnswers)}" 
               placeholder="Например: ss, netstat" 
               oninput="BuilderView.updateInputCorrect(${qIndex}, this.value)" 
@@ -1456,9 +1532,10 @@ const BuilderView = {
           <!-- Question Text -->
           <div class="mb-3">
             <label class="block text-xs font-medium text-[#525252] dark:text-[#A3A3A3] mb-1">
-              Текст вопроса (поддерживает \`inline code\`):
+              Текст вопроса (поддерживает \`inline code\` и формулы LaTeX):
             </label>
             <textarea 
+              id="builder-q-text-${qIndex}"
               rows="2" 
               placeholder="Введите формулировку вопроса..." 
               oninput="BuilderView.updateQuestionText(${qIndex}, this.value)" 
@@ -1474,6 +1551,7 @@ const BuilderView = {
               Пояснение к правильному ответу (для экрана результатов):
             </label>
             <textarea 
+              id="builder-q-expl-${qIndex}"
               rows="2" 
               placeholder="Почему этот ответ правильный..." 
               oninput="BuilderView.updateExplanation(${qIndex}, this.value)" 
@@ -1486,6 +1564,7 @@ const BuilderView = {
   },
 
   addQuestion(type = 'choice') {
+    this.syncFromDOM();
     AppState.builder.questions.push({
       id: AppState.builder.questions.length + 1,
       type: type,
@@ -1498,12 +1577,14 @@ const BuilderView = {
   },
 
   removeQuestion(idx) {
+    this.syncFromDOM();
     if (AppState.builder.questions.length <= 1) return;
     AppState.builder.questions.splice(idx, 1);
     this.render();
   },
 
   changeQuestionType(qIdx, newType) {
+    this.syncFromDOM();
     const q = AppState.builder.questions[qIdx];
     if (!q) return;
     q.type = newType;
@@ -1531,14 +1612,21 @@ const BuilderView = {
   },
 
   addOption(qIdx) {
+    this.syncFromDOM();
     const q = AppState.builder.questions[qIdx];
     if (q && Array.isArray(q.options)) {
       q.options.push('');
       this.render();
+      const newOptIdx = q.options.length - 1;
+      setTimeout(() => {
+        const newInp = document.getElementById(`builder-q-${qIdx}-opt-${newOptIdx}`);
+        if (newInp) newInp.focus();
+      }, 50);
     }
   },
 
   removeOption(qIdx, optIdx) {
+    this.syncFromDOM();
     const q = AppState.builder.questions[qIdx];
     if (q && Array.isArray(q.options) && q.options.length > 2) {
       q.options.splice(optIdx, 1);
@@ -1556,6 +1644,7 @@ const BuilderView = {
   },
 
   toggleCorrectOption(qIdx, optIdx) {
+    this.syncFromDOM();
     const q = AppState.builder.questions[qIdx];
     if (!q) return;
     q.correct = q.correct || [];
@@ -1575,9 +1664,12 @@ const BuilderView = {
   },
 
   save() {
-    const title = (document.getElementById('builder-title')?.value || '').trim();
-    const tagsRaw = (document.getElementById('builder-tags')?.value || '').trim();
-    const timerVal = Number(document.getElementById('builder-timer')?.value) || 0;
+    this.syncFromDOM();
+
+    const title = (AppState.builder.title || '').trim();
+    const description = (AppState.builder.description || '').trim();
+    const tagsRaw = (AppState.builder.tags || '').trim();
+    const timerVal = Number(AppState.builder.defaultTimerMinutes) || 0;
 
     if (!title) {
       showToast("Укажите название теста!", true);
@@ -1617,6 +1709,7 @@ const BuilderView = {
     const testPayload = {
       id: testId,
       title: title,
+      description: description,
       tags: tags,
       default_timer_minutes: timerVal,
       questions: AppState.builder.questions.map((q, idx) => ({
@@ -1630,18 +1723,24 @@ const BuilderView = {
     };
 
     DataStore.saveTest(testPayload).then(() => {
+      showToast(AppState.builder.editingId ? "Тест успешно обновлен!" : "Тест успешно создан!");
       Router.navigate('dashboard');
+    }).catch(err => {
+      showToast("Ошибка сохранения: " + err.message, true);
     });
   },
 
   exportCurrentJson() {
-    const title = (document.getElementById('builder-title')?.value || '').trim();
+    this.syncFromDOM();
+
+    const title = (AppState.builder.title || '').trim();
     if (!title) {
       showToast("Укажите хотя бы название теста для экспорта!", true);
       return;
     }
-    const tagsRaw = (document.getElementById('builder-tags')?.value || '').trim();
-    const timerVal = Number(document.getElementById('builder-timer')?.value) || 0;
+    const description = (AppState.builder.description || '').trim();
+    const tagsRaw = (AppState.builder.tags || '').trim();
+    const timerVal = Number(AppState.builder.defaultTimerMinutes) || 0;
     const tags = tagsRaw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
 
     const testId = AppState.builder.editingId ||
@@ -1650,6 +1749,7 @@ const BuilderView = {
     const testPayload = {
       id: testId,
       title: title,
+      description: description,
       tags: tags,
       default_timer_minutes: timerVal,
       questions: AppState.builder.questions.map((q, idx) => ({
