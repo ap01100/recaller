@@ -32,6 +32,11 @@
       }
     }
   </script>
+  <!-- KaTeX for LaTeX Math Rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
   <link rel="stylesheet" href="./static/style.css" />
 </head>
 
@@ -573,14 +578,15 @@
           (массив допустимых строковых ответов). Регистр не имеет значения.</li>
         <li><strong>Пояснение:</strong> поле <code class="text-xs">explanation</code> поддерживает <code
             class="text-xs">`inline code`</code>.</li>
+        <li><strong>Формулы LaTeX (KaTeX):</strong> поля <code class="text-xs">text</code>, <code class="text-xs">options</code> и <code class="text-xs">explanation</code> поддерживают формулы в формате TeX: строчные <code class="text-xs">$...$</code> и блочные <code class="text-xs">$$...$$</code>. В JSON обратные слэши обязательно экранируются (<code class="text-xs">\\Delta</code>, <code class="text-xs">\\frac{a}{b}</code>).</li>
       </ul>
 
       <div class="mt-3">
         <pre
           class="p-3 rounded-lg bg-[#141414] dark:bg-[#0A0A0A] text-[#EDEDED] text-[11px] font-mono overflow-x-auto border border-[#262626]">{
   "id": "linux-test",
-  "title": "Основы Linux",
-  "tags": ["linux", "networking"],
+  "title": "Основы Linux и формулы",
+  "tags": ["linux", "math"],
   "default_timer_minutes": 10,
   "questions": [
     {
@@ -597,6 +603,18 @@
       "text": "Команда просмотра сокетов:",
       "correct": ["ss", "netstat"],
       "explanation": "ss и netstat используются для вывода сокетов."
+    },
+    {
+      "id": 3,
+      "type": "choice",
+      "text": "Уравнение баланса активной мощности в энергосистеме:",
+      "options": [
+        "$P_{ген} = P_{потр} + \\Delta P$",
+        "$P_{ген} + P_{потр} = \\Delta P$",
+        "$P_{ген} = \\frac{P_{потр}}{\\Delta P}$"
+      ],
+      "correct": [0],
+      "explanation": "Баланс активной мощности: суммарная генерация равна суммарному потреблению плюс потери $\\Delta P$."
     }
   ]
 }</pre>

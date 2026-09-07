@@ -58,7 +58,8 @@ body {
 /* Minimalist Inline Code & Formatting in Questions */
 .question-content code,
 .explanation-content code,
-.code-inline {
+.code-inline,
+.answer-token {
   background-color: #F0F0F0;
   color: #171717;
   padding: 0.12rem 0.35rem;
@@ -71,7 +72,8 @@ body {
 
 .dark .question-content code,
 .dark .explanation-content code,
-.dark .code-inline {
+.dark .code-inline,
+.dark .answer-token {
   color: #EDEDED;
   background-color: #222222;
   border-color: #333333;
@@ -155,3 +157,21 @@ kbd {
     transform: translate(-50%, 0);
   }
 }
+
+/* KaTeX Formula Rendering Enhancements */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+  margin: 0.5rem 0 !important;
+}
+
+.katex {
+  font-size: 1.05em;
+  text-rendering: auto;
+}
+
+.katex-html {
+  white-space: normal;
+}
+

@@ -556,6 +556,41 @@ function renderMarkdownText(text) {
   return escaped.replace(/`([^`]+)`/g, '<code class="code-inline">$1</code>');
 }
 
+/**
+ * Render LaTeX math expressions inside an element using KaTeX auto-render
+ */
+function renderMath(element) {
+  if (!element) return;
+  const options = {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '\\[', right: '\\]', display: true },
+      { left: '$', right: '$', display: false },
+      { left: '\\(', right: '\\)', display: false }
+    ],
+    throwOnError: false
+  };
+
+  if (typeof renderMathInElement === 'function') {
+    try {
+      renderMathInElement(element, options);
+    } catch (e) {
+      console.warn('KaTeX auto-render error:', e);
+    }
+  } else {
+    // If KaTeX script is deferred and still loading, retry after brief delay
+    setTimeout(() => {
+      if (typeof renderMathInElement === 'function') {
+        try {
+          renderMathInElement(element, options);
+        } catch (e) {
+          console.warn('KaTeX auto-render error:', e);
+        }
+      }
+    }, 150);
+  }
+}
+
 function formatSeconds(totalSeconds) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
@@ -1001,17 +1036,23 @@ const ImportSpecModal = {
 1. Вопрос с вариантами ("type": "choice"):
    - "options": массив строк с вариантами ответов (минимум 2).
    - "correct": массив числовых индексов правильных ответов (например [0] или [0, 2]).
-   - "explanation": подробное объяснение (строка, поддерживает \`inline code\`).
+   - "explanation": подробное объяснение (строка, поддерживает \`inline code\` и формулы LaTeX).
 
 2. Вопрос с текстовым вводом ("type": "input"):
    - "correct": массив допустимых строковых ответов (регистр и пробелы игнорируются).
    - "explanation": подробное пояснение правильного ответа.
 
+Поддержка формул LaTeX (KaTeX):
+- В полях "text", "options" и "explanation" поддерживаются формулы в формате TeX:
+  - Строчные формулы: $ ... $ или \\( ... \\)
+  - Блочные формулы: $$ ... $$ или \\[ ... \\]
+- Внимание: в строках JSON символ обратного слэша является специальным, поэтому команды LaTeX необходимо экранировать двойным слэшем, например: "\\\\Delta", "\\\\frac{a}{b}".
+
 Пример чистого JSON-шаблона:
 {
-  "id": "linux-basics",
-  "title": "Основы Linux",
-  "tags": ["linux", "cli"],
+  "id": "linux-and-math",
+  "title": "Основы Linux и формулы",
+  "tags": ["linux", "math"],
   "default_timer_minutes": 10,
   "questions": [
     {
@@ -1028,6 +1069,18 @@ const ImportSpecModal = {
       "text": "Команда для просмотра сокетов:",
       "correct": ["ss", "netstat"],
       "explanation": "Утилиты ss и netstat используются для вывода сокетов."
+    },
+    {
+      "id": 3,
+      "type": "choice",
+      "text": "Уравнение баланса активной мощности в энергосистеме:",
+      "options": [
+        "$P_{ген} = P_{потр} + \\\\Delta P$",
+        "$P_{ген} + P_{потр} = \\\\Delta P$",
+        "$P_{ген} = \\\\frac{P_{потр}}{\\\\Delta P}$"
+      ],
+      "correct": [0],
+      "explanation": "Баланс активной мощности: суммарная генерация равна суммарному потреблению плюс потери $\\\\Delta P$."
     }
   ]
 }`;
@@ -1732,6 +1785,7 @@ const TestRunView = {
     const qTextEl = document.getElementById('test-question-text');
     if (qTextEl) {
       qTextEl.innerHTML = renderMarkdownText(currentQ.text);
+      renderMath(qTextEl);
     }
 
     // Render Interactive Inputs
@@ -1798,6 +1852,8 @@ const TestRunView = {
         if (inp) inp.focus();
       }, 50);
     }
+
+    renderMath(answersContainer);
 
     // Action button text
     const nextBtn = document.getElementById('test-next-btn');
@@ -2054,17 +2110,17 @@ const ResultsView = {
       if (q.type === 'choice') {
         const userOpts = (ans.selectedIndices || []).map(i => q.options[i]).filter(Boolean);
         userAnswerDisplay = userOpts.length > 0
-          ? userOpts.map(o => `<code>${escapeHtml(o)}</code>`).join(', ')
+          ? userOpts.map(o => `<span class="answer-token">${renderMarkdownText(o)}</span>`).join(', ')
           : '<span class="italic text-[#A3A3A3]">Ответ не дан</span>';
 
         const correctOpts = (q.correct || []).map(i => q.options[i]).filter(Boolean);
-        correctAnswerDisplay = correctOpts.map(o => `<code>${escapeHtml(o)}</code>`).join(', ');
+        correctAnswerDisplay = correctOpts.map(o => `<span class="answer-token">${renderMarkdownText(o)}</span>`).join(', ');
       } else {
         userAnswerDisplay = ans.inputText
-          ? `<code>${escapeHtml(ans.inputText)}</code>`
+          ? `<span class="answer-token font-mono">${escapeHtml(ans.inputText)}</span>`
           : '<span class="italic text-[#A3A3A3]">Ответ не дан</span>';
         const accepted = Array.isArray(q.correct) ? q.correct : [q.correct];
-        correctAnswerDisplay = accepted.map(a => `<code>${escapeHtml(a)}</code>`).join(' или ');
+        correctAnswerDisplay = accepted.map(a => `<span class="answer-token font-mono">${escapeHtml(a)}</span>`).join(' или ');
       }
 
       return `
@@ -2112,6 +2168,8 @@ const ResultsView = {
         </div>
       `;
     }).join('');
+
+    renderMath(container);
   },
 
   retryFailedOnly() {
@@ -2260,6 +2318,14 @@ window.addEventListener('keydown', (e) => {
 // ==============================================================================
 // 15. INITIALIZATION
 // ==============================================================================
+window.addEventListener('load', () => {
+  if (AppState.currentScreen === 'test-run') {
+    TestRunView.render();
+  } else if (AppState.currentScreen === 'results') {
+    ResultsView.renderQuestionBreakdown();
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   DataStore.init().then(() => {
     DashboardView.render();
